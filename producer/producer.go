@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/rpc"
 	"os"
+	"time"
 )
 
 type BrokerInfo struct {
@@ -20,6 +21,8 @@ const ( //used in RR1 mechanism
 	TCP_STYLE         = 1 //each request is sent every 1s, 2s, 4s, 8s... MAX_SEC
 	BRUTE_FORCE_STYLE = 2 //never stop trying to send the message
 	MAX_TRIES_STYLE   = 3 //do at most MAX_TRIES_STYLE tries
+
+	PUBLISH_SERVICE_METHOD = "QueueManager.Publish"
 
 	MAX_SEC = 64
 
@@ -55,6 +58,7 @@ func DialRR1(mess, ip, port string) {
 				fmt.Println("Message sent in TCP_STYLE")
 				break
 			} else {
+				time.Sleep(time.Duration(sec))
 				continue
 			}
 		}
@@ -165,7 +169,7 @@ func BrokerList() {
 func rr1ModeSelector() {
 
 	for {
-		fmt.Println("What type of request retransmit do you want to use ?\n")
+		fmt.Println("What type of request retransmit do you want to use ?")
 
 		fmt.Println("1)TCP_STYLE")
 		fmt.Println("2)BRUTE_FORCE_STYLE")
@@ -179,7 +183,7 @@ func rr1ModeSelector() {
 		}
 
 		if rr1Mode == MAX_TRIES_STYLE {
-			fmt.Println("How many times do you want to try to reach the queque ?\n")
+			fmt.Println("How many times do you want to try to reach the queque ?")
 			fmt.Scanf("%d", &maxTimes)
 		}
 
@@ -195,8 +199,10 @@ func Selection() {
 	var choice int
 	var message string
 
-	fmt.Println("What service method do you want to execute ?\nServiceMethod: ")
-	fmt.Scanf("%s", &serviceMethod)
+	//fmt.Println("What service method do you want to execute ?\nServiceMethod: ")
+	//fmt.Scanf("%s", &serviceMethod)
+
+	serviceMethod = PUBLISH_SERVICE_METHOD
 
 	rr1ModeSelector()
 

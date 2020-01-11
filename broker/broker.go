@@ -38,7 +38,6 @@ func (q *QueueManager) Subscribe(ipAndPort string, reply *string) error {
 	fmt.Printf("Subscribe requested by consumer: %s:%s\n", addr[0], addr[1])
 
 	*reply = "Accepted"
-	//TODO check if the message is received
 
 	//if the strategy of keeping messages is chosen then
 	//when a new consume arrives, i have to check if there are
@@ -294,7 +293,6 @@ func main() {
 
 	go serverRPC()
 
-	//TODO if does not work properly just remove
 	//the user can edit the TIME_OUT value, while the broker is working
 	for {
 		fmt.Println("Update TIME_OUT value: ")
