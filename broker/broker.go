@@ -5,34 +5,39 @@ import (
 	"log"
 	"net"
 	"net/rpc"
+	"strings"
 	"time"
 )
 
 type QueueManager int
 
 const (
-	QUEUE_LEN = 100
+	QUEUE_LEN               = 100
 	CONSUMER_SERVICE_METHOD = "Consumer.Consume"
 
 	INVISIBLE = 0
-	VISIBLE = 1
-	SENT = 2
+	VISIBLE   = 1
+	SENT      = 2
 )
 
 type QueueElement struct {
 	message string
-	visible map[int]int				//a map of consumer id to its value of visibility
-									//fot that message
+	visible map[int]int //a map of consumer id to its value of visibility
+	//fot that message
 	lastTimeVisible int
 }
 
-func (q *QueueManager) Subscribe(ip string, port *string) error {
+func (q *QueueManager) Subscribe(ipAndPort string, reply *string) error {
 
 	consumerID := consumerNum
 	consumerNum++
-	consumerList = append(consumerList, ConsumerInfo{ip, *port, consumerID})
+	addr := strings.Split(ipAndPort, ":")
 
-	*port = "Accepted"
+	consumerList = append(consumerList, ConsumerInfo{addr[0], addr[1], consumerID})
+
+	fmt.Printf("Subscribe requested by consumer: %s:%s\n", addr[0], addr[1])
+
+	*reply = "Accepted"
 	//TODO check if the message is received
 
 	//if the strategy of keeping messages is chosen then
@@ -42,14 +47,15 @@ func (q *QueueManager) Subscribe(ip string, port *string) error {
 	return nil
 }
 
-
-func (q *QueueManager) Unsubscribe(ip string, port *string) error {
+func (q *QueueManager) Unsubscribe(ipAndPort string, reply *string) error {
 
 	consumerNum--
 
+	addr := strings.Split(ipAndPort, ":")
+
 	for i, consumer := range consumerList {
-		if consumer.port == *port && consumer.ip == ip {
-			*port = "Removed"
+		if consumer.port == addr[1] && consumer.ip == addr[0] {
+			*reply = "Removed"
 			//this is not a critical section as long as
 			//the RPC server is sequential. It could happen that
 			//a consumer Unsubscribe but its unsubscribe request
@@ -61,7 +67,6 @@ func (q *QueueManager) Unsubscribe(ip string, port *string) error {
 
 	return nil
 }
-
 
 func (q *QueueManager) Publish(message string, reply *string) error {
 
@@ -93,7 +98,7 @@ func (q *QueueManager) Publish(message string, reply *string) error {
 		go sendToConsumer(indx, consumerList[i])
 	}
 
-	fmt.Println("Message received: "+message)
+	fmt.Println("Message received: " + message)
 	return nil
 }
 
@@ -107,13 +112,12 @@ var consumerList []ConsumerInfo
 var consumerNum int
 
 type ConsumerInfo struct {
-	ip string
+	ip   string
 	port string
-	ID int
+	ID   int
 }
 
-
-func findPosInQueue() int{
+func findPosInQueue() int {
 
 	for i, qe := range Queue {
 		if qe.lastTimeVisible == -1 {
@@ -134,6 +138,11 @@ func sendToConsumer(queueElementIndex int, consumer ConsumerInfo) {
 
 	client, err := rpc.Dial("tcp", consumer.ip+":"+consumer.port)
 
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+
 	var reply string
 
 	//TODO the TIME OUT VALUE has to be chosen in order to avoid
@@ -153,6 +162,7 @@ func sendToConsumer(queueElementIndex int, consumer ConsumerInfo) {
 	//and its value for its consumer remains 'invisible'
 
 	if reply == "ACK" {
+		fmt.Println("The message has been acked")
 		//if i'm here the massage has been correctly delivered
 		Queue[queueElementIndex].visible[consumer.ID] = SENT
 
@@ -178,6 +188,7 @@ func sendToConsumer(queueElementIndex int, consumer ConsumerInfo) {
 			//It would have been a problem if each of
 			//them wanted to set a different value
 			Queue[queueElementIndex].lastTimeVisible = -1
+			fmt.Println("A message has been sent to all consumers")
 		}
 	}
 }
@@ -205,8 +216,8 @@ func TimeOutChecker() {
 
 	var now int
 
-	for	{
-		time.Sleep(time.Second*time.Duration(TIME_OUT))
+	for {
+		time.Sleep(time.Second * time.Duration(TIME_OUT))
 
 		now = time.Now().Second()
 
@@ -286,7 +297,7 @@ func main() {
 	//TODO if does not work properly just remove
 	//the user can edit the TIME_OUT value, while the broker is working
 	for {
-		fmt.Println("Insert new TIME_OUT value: ")
+		fmt.Println("Update TIME_OUT value: ")
 		fmt.Scanf("%d", &TIME_OUT)
 	}
 

@@ -4,10 +4,9 @@ import (
 	"fmt"
 	"net/rpc"
 	"os"
-	"time"
 )
 
-type ProducerInfo struct {
+type BrokerInfo struct {
 
 	//ip and port are going to be read and used by the producer
 	//to establish a connection with the broker
@@ -15,21 +14,19 @@ type ProducerInfo struct {
 	port            string
 	messagesChannel chan string
 	ctrlChannel     chan int
-
 }
 
-const (							//used in RR1 mechanism
-	TCP_STYLE = 1				//each request is sent every 1s, 2s, 4s, 8s... MAX_SEC
-	BRUTE_FORCE_STYLE = 2		//never stop trying to send the message
-	MAX_TRIES_STYLE = 3			//do at most MAX_TRIES_STYLE tries
+const ( //used in RR1 mechanism
+	TCP_STYLE         = 1 //each request is sent every 1s, 2s, 4s, 8s... MAX_SEC
+	BRUTE_FORCE_STYLE = 2 //never stop trying to send the message
+	MAX_TRIES_STYLE   = 3 //do at most MAX_TRIES_STYLE tries
 
 	MAX_SEC = 64
 
-	GOR_EXIT = 0				//used to request the closure of the "Produce" go routine
+	GOR_EXIT = 0 //used to request the closure of the "Publish" go routine
 )
 
-//TODO producer list is a critical section
-var producerList []ProducerInfo
+var brokerList []BrokerInfo
 var serviceMethod string
 var rr1Mode int
 var maxTimes int
@@ -41,20 +38,21 @@ func DialRR1(mess, ip, port string) {
 	client, err := rpc.Dial("tcp", ip+":"+port)
 
 	if err != nil {
-		fmt.Println("Something went wrong...\n"+err.Error())
+		fmt.Println("Something went wrong...\n" + err.Error())
 		return
 	}
 
 	if rr1Mode == TCP_STYLE {
 
-		for sec := time.Second * 1; sec <= MAX_SEC; sec = sec *2 {
+		for sec := 1; sec <= MAX_SEC; sec = sec * 2 {
 
 			err = client.Call(serviceMethod, mess, &reply)
 
 			if err != nil && sec == MAX_SEC {
-				fmt.Println("Could not send the message\n"+err.Error())
+				fmt.Println("Could not send the message\n" + err.Error())
 				return
 			} else if err == nil && sec < MAX_SEC {
+				fmt.Println("Message sent in TCP_STYLE")
 				break
 			} else {
 				continue
@@ -67,6 +65,7 @@ func DialRR1(mess, ip, port string) {
 			err = client.Call(serviceMethod, mess, &reply)
 
 			if err == nil {
+				fmt.Println("Message sent in BRUTE_STYLE")
 				break
 			}
 		}
@@ -77,9 +76,10 @@ func DialRR1(mess, ip, port string) {
 
 			err = client.Call(serviceMethod, mess, &reply)
 			if err != nil && i == maxTimes {
-				fmt.Println("Could not send the message\n"+err.Error())
+				fmt.Println("Could not send the message\n" + err.Error())
 				return
-			} else if err == nil && maxTimes < MAX_SEC {
+			} else if err == nil {
+				fmt.Println("Message sent in MAX_TRIES_STYLE")
 				break
 			} else {
 				continue
@@ -93,21 +93,20 @@ func DialRR1(mess, ip, port string) {
 	}
 
 	fmt.Printf("Go Routine %d: message sent.\n", os.Getgid())
-	//TODO close channel
 }
 
 //the actual function that will listen to a given channel
 //and when a message is received the DialRR1 mechanism will start
-//there will be as many go routine of the Produce func as the brokers connected to the producer
-func Produce(info ProducerInfo) {
+//there will be as many go routine of the Publish func as the brokers connected to the producer
+func Publish(info BrokerInfo) {
 
 	for {
-		select{
-		case cmd := <- info.ctrlChannel:
+		select {
+		case cmd := <-info.ctrlChannel:
 			if cmd == GOR_EXIT {
 				return
 			}
-		case msg := <- info.messagesChannel:
+		case msg := <-info.messagesChannel:
 			DialRR1(msg, info.ip, info.port)
 		}
 	}
@@ -125,10 +124,10 @@ func AddBroker() {
 	ch := make(chan string)
 	ctrlCh := make(chan int)
 
-	producerList = append(producerList, ProducerInfo{ip, port, ch, ctrlCh})
+	brokerList = append(brokerList, BrokerInfo{ip, port, ch, ctrlCh})
 
 	//create go routine associated to the broker
-	go Produce(producerList[len(producerList)-1])
+	go Publish(brokerList[len(brokerList)-1])
 
 }
 
@@ -144,20 +143,20 @@ func RemoveBroker() {
 	fmt.Printf("You've choosed %d\n", choice)
 
 	//send kill message to kill the goroutine associated to the broker.... work on this
-	producerList[choice].ctrlChannel <- GOR_EXIT
+	brokerList[choice].ctrlChannel <- GOR_EXIT
 
-	close(producerList[choice].ctrlChannel)
-	close(producerList[choice].messagesChannel)
+	close(brokerList[choice].ctrlChannel)
+	close(brokerList[choice].messagesChannel)
 
-	producerList[choice] = producerList[len(producerList)-1] // Copy last element to index i.
-	producerList = producerList[:len(producerList)-1] // Truncate slice
+	brokerList[choice] = brokerList[len(brokerList)-1] // Copy last element to index i.
+	brokerList = brokerList[:len(brokerList)-1]        // Truncate slice
 
 }
 
 func BrokerList() {
 
 	fmt.Println("Broker list:")
-	for indx, pl := range producerList {
+	for indx, pl := range brokerList {
 		fmt.Printf("%d) %s:%s\n", indx, pl.ip, pl.port)
 	}
 
@@ -206,44 +205,43 @@ func Selection() {
 		fmt.Println("1)Print BrokerList")
 		fmt.Println("2)Remove a Broker")
 		fmt.Println("3)Add a Broker")
-		fmt.Println("4)Produce a message")
+		fmt.Println("4)Publish a message")
 		fmt.Println("5)Select a RR1 Mode")
 		fmt.Println("6)Exit")
 
 		fmt.Scanf("%d", &choice)
 
-		switch choice{
-			case 1:
-				BrokerList()
-				break
-			case 2:
-				RemoveBroker()
-				break
-			case 3:
-				AddBroker()
-				break
-			case 4:
-				fmt.Println("Insert the message that you want to produce: ")
-				fmt.Scanf("%s", &message)
+		switch choice {
+		case 1:
+			BrokerList()
+			break
+		case 2:
+			RemoveBroker()
+			break
+		case 3:
+			AddBroker()
+			break
+		case 4:
+			fmt.Println("Insert the message that you want to produce: ")
+			fmt.Scanf("%s", &message)
 
-				//Inserting message in all broker's channels
-				for _, p := range producerList {
-					p.messagesChannel <- message
-				}
-			case 5:
-				rr1ModeSelector()
-			case 6:
-				return
+			//Inserting message in all broker's channels
+			for _, p := range brokerList {
+				p.messagesChannel <- message
+			}
+			break
+		case 5:
+			rr1ModeSelector()
+		case 6:
+			return
 
-			default:
-				fmt.Println("What ?")
+		default:
+			fmt.Println("What ?")
 		}
 	}
 
 }
 
-
 func main() {
 	Selection()
-
 }
