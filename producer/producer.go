@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/rpc"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -17,7 +18,7 @@ type BrokerInfo struct {
 	ctrlChannel     chan int
 }
 
-const ( //used in RR1 mechanism
+const (
 	TCP_STYLE         = 1 //each request is sent every 1s, 2s, 4s, 8s... MAX_SEC
 	BRUTE_FORCE_STYLE = 2 //never stop trying to send the message
 	MAX_TRIES_STYLE   = 3 //do at most MAX_TRIES_STYLE tries
@@ -91,8 +92,6 @@ func DialRR1(mess, ip, port string) {
 		fmt.Println("Invalid rr1Mode inserted")
 		return
 	}
-
-	fmt.Printf("Go Routine %d: message sent.\n", os.Getgid())
 }
 
 //the actual function that will listen to a given channel
@@ -113,13 +112,7 @@ func Publish(info BrokerInfo) {
 
 }
 
-func AddBroker() {
-
-	var ip, port string
-	fmt.Println("Insert broker IP: ")
-	fmt.Scanf("%s:%s", &ip)
-	fmt.Println("Insert broker Port: ")
-	fmt.Scanf("%s", &port)
+func AddBroker(ip, port string) {
 
 	ch := make(chan string)
 	ctrlCh := make(chan int)
@@ -190,13 +183,10 @@ func rr1ModeSelector() {
 
 //go routine that will take messages from stdin
 //and send to all the channels of all the broker that the producer is connected to
-func main() {
+func ManualMode() {
 
 	var choice int
-	var message string
-
-	//fmt.Println("What service method do you want to execute ?\nServiceMethod: ")
-	//fmt.Scanf("%s", &serviceMethod)
+	var message, ip, port string
 
 	serviceMethod = PUBLISH_SERVICE_METHOD
 
@@ -221,7 +211,11 @@ func main() {
 			RemoveBroker()
 			break
 		case 3:
-			AddBroker()
+			fmt.Println("Insert broker IP: ")
+			fmt.Scanf("%s:%s", &ip)
+			fmt.Println("Insert broker Port: ")
+			fmt.Scanf("%s", &port)
+			AddBroker(ip, port)
 			break
 		case 4:
 			fmt.Println("Insert the message that you want to produce: ")
@@ -240,6 +234,42 @@ func main() {
 		default:
 			fmt.Println("What ?")
 		}
+	}
+}
+
+func main() {
+
+	if len(os.Args) < 2 || (os.Args[1] != "1" && os.Args[1] != "0") {
+		fmt.Println("./producer <mode>\n(mode=0 for automatic test, mode=1 for manual test)")
+		return
+	}
+
+	if os.Args[1] == "1" {
+		ManualMode()
+	}
+
+	SECS := 5
+	messageSent := 1
+
+	//The automatic test of the broker and the consumer must begin first.
+
+	//During the test the producer will generate each SECS seconds
+	//the fixed message 'Debug-#messageSent'.
+	//The producer will publish message to a single broker on port 12345 (in TCP_STYLE).
+	rr1Mode = TCP_STYLE
+	serviceMethod = PUBLISH_SERVICE_METHOD
+	AddBroker("0.0.0.0", "12345")
+	for {
+		time.Sleep(time.Second * time.Duration(SECS))
+
+		message := "TestMessage n." + strconv.Itoa(messageSent)
+
+		for _, p := range brokerList {
+			p.messagesChannel <- message
+		}
+
+		messageSent += 1
+
 	}
 
 }

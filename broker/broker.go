@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"net/rpc"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -67,7 +68,7 @@ func (q *QueueManager) Unsubscribe(ipPort string, reply *string) error {
 
 func (q *QueueManager) Publish(message string, reply *string) error {
 
-	//actual strategy: if there are no consumer, reject the message
+	//actual implementation: if there are no consumer, reject the message
 	if consumerNum == 0 {
 		return nil
 	}
@@ -104,8 +105,6 @@ var TIME_OUT int
 var port string
 var Queue [QUEUE_LEN]QueueElement
 
-//consumerList is not a critical section as long as
-//the RPC server is sequential
 var consumerList []ConsumerInfo
 var mutexConsumer sync.Mutex
 var consumerNum int
@@ -128,8 +127,6 @@ func findPosInQueue() int {
 	return -1
 }
 
-//a go routine that for each message to each consumer
-//reuse producer code... 3
 func sendToConsumer(queueElementIndex int, consumer ConsumerInfo) {
 
 	//changing visibility of the message for the current consumer to invisible
@@ -144,7 +141,7 @@ func sendToConsumer(queueElementIndex int, consumer ConsumerInfo) {
 
 	var reply string
 
-	//TODO the TIME OUT VALUE has to be chosen in order to avoid
+	//N.B.: the TIME OUT VALUE has to be chosen in order to avoid
 	//situations where i could send a message more than once.
 	//for simplicity, i am not handling this case.
 
@@ -236,7 +233,6 @@ func TimeOutChecker() {
 
 				qe.lastTimeVisible = time.Now().Second()
 
-				//TODO fix stuck here
 				//send the queue element to the consumer that has not received it
 				for consID, vis := range qe.visible {
 
@@ -248,8 +244,10 @@ func TimeOutChecker() {
 					}
 					if vis != SENT {
 						go sendToConsumer(queueIndx, c)
-						//TODO handle eventual prediction of crashed consumer
-						//by increasing a counter...
+						//here we could handle eventual prediction of
+						//crashed consumer by increasing a counter that
+						//indicates number of retransmissions. When the number
+						//is grater then a fixed value the consumer could be considered crashed.
 					}
 				}
 
@@ -313,11 +311,24 @@ func QueueStatus() {
 
 func main() {
 
-	fmt.Println("Insert time out value (in seconds): ")
-	fmt.Scanf("%d", &TIME_OUT)
+	if len(os.Args) < 2 || (os.Args[1] != "1" && os.Args[1] != "0") {
+		fmt.Println("./broker <mode>\n(mode=0 for automatic test, mode=1 for manual test)")
+		return
+	}
 
-	fmt.Println("Insert RPC server PORT: ")
-	fmt.Scanf("%s", &port)
+	if os.Args[1] == "1" {
+		fmt.Println("Insert time out value (in seconds): ")
+		fmt.Scanf("%d", &TIME_OUT)
+
+		fmt.Println("Insert RPC server PORT: ")
+		fmt.Scanf("%s", &port)
+
+	} else {
+		//if automatic mode is chosen, a fixed port and TIME_OUT value
+		//will be set. N.B.: the time out value could be updated later.
+		TIME_OUT = 5
+		port = "12345"
+	}
 
 	consumerNum = 0
 
@@ -355,5 +366,4 @@ func main() {
 			fmt.Println("What ?")
 		}
 	}
-
 }

@@ -3,9 +3,13 @@ package main
 import (
 	"fmt"
 	"log"
+	"math/rand"
 	"net"
 	"net/rpc"
+	"os"
+	"strconv"
 	"sync"
+	"time"
 )
 
 type Consumer int
@@ -144,7 +148,7 @@ func serverRPC() {
 var myIp, port string
 
 //go routine that will permit the user to interact with the consumers
-func main() {
+func ManualMode() {
 
 	var choice int
 
@@ -186,5 +190,31 @@ func main() {
 			fmt.Println("What ?")
 		}
 	}
+}
 
+func main() {
+
+	if len(os.Args) < 2 || (os.Args[1] != "1" && os.Args[1] != "0") {
+		fmt.Println("./consumer <mode>\n(mode=0 for automatic test, mode=1 for manual test)")
+		return
+	}
+
+	if os.Args[1] == "1" {
+		ManualMode()
+	}
+
+	UPDATE_SEC := 5
+
+	//The automatic test of the broker must begin first.
+	//During the automatic test the consumer will show the messages that has received
+	//every UPDATE_SEC seconds
+
+	myIp = "0.0.0.0"
+	port = strconv.Itoa(rand.Intn(65536-1025) + 1025)
+	go serverRPC()
+
+	for {
+		time.Sleep(time.Duration(UPDATE_SEC) * time.Second)
+		ConsumeMessages()
+	}
 }
