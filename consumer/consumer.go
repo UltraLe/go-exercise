@@ -54,13 +54,7 @@ const (
 
 var brokerList []BrokerInfo
 
-func SubscribeToBroker() {
-
-	var ip, brokPort string
-	fmt.Println("Insert broker IP: ")
-	fmt.Scanf("%s:%s", &ip)
-	fmt.Println("Insert broker Port: ")
-	fmt.Scanf("%s", &brokPort)
+func SubscribeToBroker(ip, brokPort string) {
 
 	brokerList = append(brokerList, BrokerInfo{ip, brokPort})
 
@@ -151,6 +145,7 @@ var myIp, port string
 func ManualMode() {
 
 	var choice int
+	var brokPort, brokIP string
 
 	fmt.Println("Insert RPC server IP for the consumer: ")
 	fmt.Scanf("%s", &myIp)
@@ -178,7 +173,11 @@ func ManualMode() {
 			UnsubscribeFromBroker()
 			break
 		case 3:
-			SubscribeToBroker()
+			fmt.Println("Insert broker IP: ")
+			fmt.Scanf("%s:%s", &brokIP)
+			fmt.Println("Insert broker Port: ")
+			fmt.Scanf("%s", &brokPort)
+			SubscribeToBroker(brokIP, brokPort)
 			break
 		case 4:
 			ConsumeMessages()
@@ -212,7 +211,7 @@ func main() {
 	myIp = "0.0.0.0"
 	port = strconv.Itoa(rand.Intn(65536-1025) + 1025)
 	go serverRPC()
-
+	SubscribeToBroker("0.0.0.0", "12345")
 	for {
 		time.Sleep(time.Duration(UPDATE_SEC) * time.Second)
 		ConsumeMessages()

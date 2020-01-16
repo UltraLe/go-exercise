@@ -263,6 +263,7 @@ func main() {
 		time.Sleep(time.Second * time.Duration(SECS))
 
 		message := "TestMessage n." + strconv.Itoa(messageSent)
+		fmt.Println("Producing message: ", message)
 
 		for _, p := range brokerList {
 			p.messagesChannel <- message
