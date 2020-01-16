@@ -54,7 +54,6 @@ func DialRR1(mess, ip, port string) {
 				fmt.Println("Could not send the message\n" + err.Error())
 				return
 			} else if err == nil && sec < MAX_SEC {
-				fmt.Println("Message sent in TCP_STYLE")
 				break
 			} else {
 				time.Sleep(time.Duration(sec))
@@ -68,7 +67,6 @@ func DialRR1(mess, ip, port string) {
 			err = client.Call(serviceMethod, mess, &reply)
 
 			if err == nil {
-				fmt.Println("Message sent in BRUTE_STYLE")
 				break
 			}
 		}
@@ -82,7 +80,6 @@ func DialRR1(mess, ip, port string) {
 				fmt.Println("Could not send the message\n" + err.Error())
 				return
 			} else if err == nil {
-				fmt.Println("Message sent in MAX_TRIES_STYLE")
 				break
 			} else {
 				continue

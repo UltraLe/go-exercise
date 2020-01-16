@@ -23,14 +23,13 @@ const (
 type QueueElement struct {
 	message string
 	visible map[int]int //a map of consumer id to its value of visibility
-	//fot that message
+	//for that message
 	lastTimeVisible int
 }
 
-//TODO add in ip & port the TOPIC NAME
-func (q *QueueManager) Subscribe(ipAndPort string, reply *string) error {
+func (q *QueueManager) Subscribe(ipPort string, reply *string) error {
 
-	addr := strings.Split(ipAndPort, ":")
+	addr := strings.Split(ipPort, ":")
 
 	mutexConsumer.Lock()
 	consumerID := consumerNum
@@ -42,16 +41,12 @@ func (q *QueueManager) Subscribe(ipAndPort string, reply *string) error {
 
 	*reply = "Accepted"
 
-	//if the strategy of keeping messages is chosen then
-	//when a new consume arrives, i have to check if there are
-	//pending messages
-
 	return nil
 }
 
-func (q *QueueManager) Unsubscribe(ipAndPort string, reply *string) error {
+func (q *QueueManager) Unsubscribe(ipPort string, reply *string) error {
 
-	addr := strings.Split(ipAndPort, ":")
+	addr := strings.Split(ipPort, ":")
 
 	mutexConsumer.Lock()
 	consumerNum--
@@ -183,7 +178,7 @@ func sendToConsumer(queueElementIndex int, consumer ConsumerInfo) {
 		}
 
 		if del {
-			//i am not using the synchronization, this means
+			//i am not using the synchronization here, this means
 			//that when scanning, more than one go routine can
 			//realize that all the others has sent the message
 			//This means that more than one routine could set
@@ -191,7 +186,7 @@ func sendToConsumer(queueElementIndex int, consumer ConsumerInfo) {
 			//It would have been a problem if each of
 			//them wanted to set a different value
 			Queue[queueElementIndex].lastTimeVisible = -1
-			fmt.Println("A message has been sent to all consumers")
+			fmt.Println("A message has been sent to all consumers, therefore deleted from the queue")
 		}
 	}
 }
@@ -284,6 +279,38 @@ func serverRPC() {
 	rpc.Accept(inbound)
 }
 
+func QueueStatus() {
+
+	for i, q := range Queue {
+
+		if q.lastTimeVisible == -1 {
+			continue
+		}
+
+		fmt.Println("--------------------------------------------------------------------")
+		fmt.Printf("Queue Element n.%d\n", i)
+		fmt.Printf("Message: %s\n", q.message)
+		fmt.Println("Message status for the consumer:")
+		for cid, v := range q.visible {
+			c := getConsumer(cid)
+			fmt.Printf("Consumer (ID: %d) %s:%s --> Message ", cid, c.ip, c.port)
+			switch v {
+			case INVISIBLE:
+				fmt.Println("has been sent")
+				break
+			case VISIBLE:
+				fmt.Println("has not been sent yet")
+				break
+			case SENT:
+				fmt.Println("has been received")
+				break
+			}
+		}
+		fmt.Println("--------------------------------------------------------------------")
+	}
+
+}
+
 func main() {
 
 	fmt.Println("Insert time out value (in seconds): ")
@@ -305,10 +332,28 @@ func main() {
 
 	go serverRPC()
 
-	//the user can edit the TIME_OUT value, while the broker is working
+	var choice int
+
 	for {
-		fmt.Println("Update TIME_OUT value: ")
-		fmt.Scanf("%d", &TIME_OUT)
+		fmt.Println("What do you want to do ?")
+		fmt.Println("1)Show the status of the messages")
+		fmt.Println("2)Update TO value")
+		fmt.Println("3)Exit")
+
+		fmt.Scanf("%d", &choice)
+
+		switch choice {
+		case 1:
+			QueueStatus()
+			break
+		case 2:
+			fmt.Scanf("%d", &TIME_OUT)
+			break
+		case 3:
+			return
+		default:
+			fmt.Println("What ?")
+		}
 	}
 
 }
