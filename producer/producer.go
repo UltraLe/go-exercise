@@ -23,13 +23,12 @@ const ( //used in RR1 mechanism
 	MAX_TRIES_STYLE   = 3 //do at most MAX_TRIES_STYLE tries
 
 	PUBLISH_SERVICE_METHOD = "QueueManager.Publish"
-
-	MAX_SEC = 64
-
-	GOR_EXIT = 0 //used to request the closure of the "Publish" go routine
+	MAX_SEC                = 64
+	GOR_EXIT               = 0 //used to request the closure of the "Publish" go routine
 )
 
 var brokerList []BrokerInfo
+
 var serviceMethod string
 var rr1Mode int
 var maxTimes int
@@ -41,7 +40,7 @@ func DialRR1(mess, ip, port string) {
 	client, err := rpc.Dial("tcp", ip+":"+port)
 
 	if err != nil {
-		fmt.Println("Something went wrong...\n" + err.Error())
+		fmt.Println(err.Error())
 		return
 	}
 
@@ -194,7 +193,7 @@ func rr1ModeSelector() {
 
 //go routine that will take messages from stdin
 //and send to all the channels of all the broker that the producer is connected to
-func Selection() {
+func main() {
 
 	var choice int
 	var message string
@@ -246,8 +245,4 @@ func Selection() {
 		}
 	}
 
-}
-
-func main() {
-	Selection()
 }

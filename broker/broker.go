@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/rpc"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -14,10 +15,9 @@ type QueueManager int
 const (
 	QUEUE_LEN               = 100
 	CONSUMER_SERVICE_METHOD = "Consumer.Consume"
-
-	INVISIBLE = 0
-	VISIBLE   = 1
-	SENT      = 2
+	INVISIBLE               = 0
+	VISIBLE                 = 1
+	SENT                    = 2
 )
 
 type QueueElement struct {
@@ -27,13 +27,16 @@ type QueueElement struct {
 	lastTimeVisible int
 }
 
+//TODO add in ip & port the TOPIC NAME
 func (q *QueueManager) Subscribe(ipAndPort string, reply *string) error {
 
-	consumerID := consumerNum
-	consumerNum++
 	addr := strings.Split(ipAndPort, ":")
 
+	mutexConsumer.Lock()
+	consumerID := consumerNum
+	consumerNum++
 	consumerList = append(consumerList, ConsumerInfo{addr[0], addr[1], consumerID})
+	mutexConsumer.Unlock()
 
 	fmt.Printf("Subscribe requested by consumer: %s:%s\n", addr[0], addr[1])
 
@@ -48,10 +51,10 @@ func (q *QueueManager) Subscribe(ipAndPort string, reply *string) error {
 
 func (q *QueueManager) Unsubscribe(ipAndPort string, reply *string) error {
 
-	consumerNum--
-
 	addr := strings.Split(ipAndPort, ":")
 
+	mutexConsumer.Lock()
+	consumerNum--
 	for i, consumer := range consumerList {
 		if consumer.port == addr[1] && consumer.ip == addr[0] {
 			*reply = "Removed"
@@ -63,7 +66,7 @@ func (q *QueueManager) Unsubscribe(ipAndPort string, reply *string) error {
 			consumerList = consumerList[:len(consumerList)-1]
 		}
 	}
-
+	mutexConsumer.Unlock()
 	return nil
 }
 
@@ -89,6 +92,7 @@ func (q *QueueManager) Publish(message string, reply *string) error {
 
 	//in this way each message will be sent to the consumer that
 	//are connected 'in this moment' to the broker
+	mutexConsumer.Lock()
 	for _, c := range consumerList {
 		Queue[indx].visible[c.ID] = VISIBLE
 	}
@@ -96,8 +100,8 @@ func (q *QueueManager) Publish(message string, reply *string) error {
 	for i := 0; i < consumerNum; i++ {
 		go sendToConsumer(indx, consumerList[i])
 	}
+	mutexConsumer.Unlock()
 
-	fmt.Println("Message received: " + message)
 	return nil
 }
 
@@ -108,6 +112,7 @@ var Queue [QUEUE_LEN]QueueElement
 //consumerList is not a critical section as long as
 //the RPC server is sequential
 var consumerList []ConsumerInfo
+var mutexConsumer sync.Mutex
 var consumerNum int
 
 type ConsumerInfo struct {
@@ -161,7 +166,6 @@ func sendToConsumer(queueElementIndex int, consumer ConsumerInfo) {
 	//and its value for its consumer remains 'invisible'
 
 	if reply == "ACK" {
-		fmt.Println("The message has been acked")
 		//if i'm here the massage has been correctly delivered
 		Queue[queueElementIndex].visible[consumer.ID] = SENT
 
@@ -199,11 +203,14 @@ func getConsumer(ID int) ConsumerInfo {
 	//and could not be present anymore
 	c_nil.ID = -1
 
+	mutexConsumer.Lock()
 	for _, c := range consumerList {
 		if c.ID == ID {
+			mutexConsumer.Unlock()
 			return c
 		}
 	}
+	mutexConsumer.Unlock()
 
 	//if am here i have to notify the caller that the consumer
 	//han not been found
@@ -232,11 +239,16 @@ func TimeOutChecker() {
 			//if TO oof the queue element has expired, then send again the message
 			if now >= messTO {
 
+				qe.lastTimeVisible = time.Now().Second()
+
+				//TODO fix stuck here
 				//send the queue element to the consumer that has not received it
 				for consID, vis := range qe.visible {
 
 					c := getConsumer(consID)
 					if c.ID == -1 {
+						//if the consumer has unsubscribed in the meanwhile
+						//just skip it
 						continue
 					}
 					if vis != SENT {

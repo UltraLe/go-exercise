@@ -5,33 +5,38 @@ import (
 	"log"
 	"net"
 	"net/rpc"
+	"sync"
 )
 
 type Consumer int
 
 func (c *Consumer) Consume(mess string, reply *string) error {
 
+	mutex.Lock()
 	consumedMessages = append(consumedMessages, mess)
-	fmt.Println("MEssage arrived: " + mess)
+	mutex.Unlock()
+
 	*reply = "ACK"
 
 	return nil
 }
 
 var consumedMessages []string
+var mutex sync.Mutex
 
 func ConsumeMessages() {
+
+	mutex.Lock()
 	fmt.Println("Message list:")
 	for i, m := range consumedMessages {
 		fmt.Printf("%d] %s\n", i, m)
 	}
 	fmt.Println("End of message list")
+	mutex.Unlock()
 
-	//consumedMessages = make([]string, MAX_MESSAGES)
 }
 
 type BrokerInfo struct {
-
 	//ip and port are going to be read and used by the consumer
 	//to consume broker messages
 	ip   string
@@ -133,14 +138,13 @@ func serverRPC() {
 	consumer := new(Consumer)
 	rpc.Register(consumer)
 
-	//TODO listen only from subscribed broker
 	rpc.Accept(inbound)
 }
 
 var myIp, port string
 
 //go routine that will permit the user to interact with the consumers
-func Selection() {
+func main() {
 
 	var choice int
 
@@ -183,8 +187,4 @@ func Selection() {
 		}
 	}
 
-}
-
-func main() {
-	Selection()
 }
