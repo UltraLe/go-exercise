@@ -251,7 +251,7 @@ func main() {
 	SECS := 5
 	messageSent := 1
 
-	fmt.Printf("\n\tProducer started in automatic mode\n")
+	fmt.Printf("\n\tProducer started\n1n")
 
 	//The automatic test of the broker and the consumer must begin first.
 

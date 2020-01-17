@@ -218,7 +218,7 @@ func main() {
 		port = strconv.Itoa(rand.Intn(65536-1025)*(time.Now().Second())%65536 + 1025)
 	}
 
-	fmt.Printf("\n\tConsumer %s:%s started in automatic mode\n", myIp, port)
+	fmt.Printf("\n\tConsumer %s:%s started\n\n", myIp, port)
 
 	go serverRPC()
 	SubscribeToBroker("0.0.0.0", "12345")

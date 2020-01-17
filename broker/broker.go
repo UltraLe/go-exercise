@@ -289,6 +289,8 @@ func serverRPC() {
 
 func QueueStatus() {
 
+	fmt.Println("Queue Messages Status Start")
+
 	for i, q := range Queue {
 
 		if q.lastTimeVisible == -1 {
@@ -317,6 +319,10 @@ func QueueStatus() {
 		fmt.Println("--------------------------------------------------------------------")
 	}
 
+	fmt.Println("Queue Messages Status Stop")
+	//if no element are showed, all the messages have been sent
+	//the the consumer subscribed to the queue
+
 }
 
 func main() {
@@ -340,7 +346,7 @@ func main() {
 		port = "12345"
 	}
 
-	fmt.Printf("\n\tBroker listening on PORT %s started in automatic mode\n", port)
+	fmt.Printf("\n\tBroker listening on PORT %s started\n\n", port)
 
 	consumerNum = 0
 
