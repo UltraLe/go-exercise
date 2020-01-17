@@ -33,6 +33,18 @@ func (q *QueueManager) Subscribe(ipPort string, reply *string) error {
 	addr := strings.Split(ipPort, ":")
 
 	mutexConsumer.Lock()
+
+	//if the consumer has already present in the consumer list,
+	//maybe because it has crashed then recovered and re-subscribed,
+	//it must not be inserted again into the list.
+	for _, c := range consumerList {
+		if c.ip == addr[0] && c.port == addr[1] {
+			mutexConsumer.Unlock()
+			fmt.Printf("The consumer %s:%s has been recovered\n", c.ip, c.port)
+			*reply = "Accepted"
+			return nil
+		}
+	}
 	consumerID := consumerNum
 	consumerNum++
 	consumerList = append(consumerList, ConsumerInfo{addr[0], addr[1], consumerID})
@@ -41,7 +53,6 @@ func (q *QueueManager) Subscribe(ipPort string, reply *string) error {
 	fmt.Printf("Subscribe requested by consumer: %s:%s\n", addr[0], addr[1])
 
 	*reply = "Accepted"
-
 	return nil
 }
 
@@ -135,7 +146,7 @@ func sendToConsumer(queueElementIndex int, consumer ConsumerInfo) {
 	client, err := rpc.Dial("tcp", consumer.ip+":"+consumer.port)
 
 	if err != nil {
-		fmt.Println(err.Error())
+		//fmt.Println(err.Error())
 		return
 	}
 
@@ -150,7 +161,7 @@ func sendToConsumer(queueElementIndex int, consumer ConsumerInfo) {
 	err = client.Call(CONSUMER_SERVICE_METHOD, Queue[queueElementIndex].message, &reply)
 
 	if err != nil {
-		fmt.Println(err.Error())
+		//fmt.Println(err.Error())
 		return
 	}
 
@@ -183,7 +194,6 @@ func sendToConsumer(queueElementIndex int, consumer ConsumerInfo) {
 			//It would have been a problem if each of
 			//them wanted to set a different value
 			Queue[queueElementIndex].lastTimeVisible = -1
-			fmt.Println("A message has been sent to all consumers, therefore deleted from the queue")
 		}
 	}
 }
@@ -329,6 +339,8 @@ func main() {
 		TIME_OUT = 5
 		port = "12345"
 	}
+
+	fmt.Printf("\n\tBroker listening on PORT %s started in automatic mode\n", port)
 
 	consumerNum = 0
 

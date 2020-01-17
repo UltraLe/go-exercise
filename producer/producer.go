@@ -251,6 +251,8 @@ func main() {
 	SECS := 5
 	messageSent := 1
 
+	fmt.Printf("\n\tProducer started in automatic mode\n")
+
 	//The automatic test of the broker and the consumer must begin first.
 
 	//During the test the producer will generate each SECS seconds

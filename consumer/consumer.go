@@ -193,8 +193,9 @@ func ManualMode() {
 
 func main() {
 
-	if len(os.Args) < 2 || (os.Args[1] != "1" && os.Args[1] != "0") {
-		fmt.Println("./consumer <mode>\n(mode=0 for automatic test, mode=1 for manual test)")
+	if os.Args[1] != "2" && os.Args[1] != "1" && os.Args[1] != "0" {
+		fmt.Println("./consumer <mode>")
+		fmt.Println("(mode=0 for automatic test, mode=1 for manual test, mode=2 + <port> automatic test with given port)")
 		return
 	}
 
@@ -209,7 +210,16 @@ func main() {
 	//every UPDATE_SEC seconds
 
 	myIp = "0.0.0.0"
-	port = strconv.Itoa(rand.Intn(65536-1025) + 1025)
+	rand.Seed(12345)
+
+	if os.Args[1] == "2" {
+		port = os.Args[2]
+	} else {
+		port = strconv.Itoa(rand.Intn(65536-1025)*(time.Now().Second())%65536 + 1025)
+	}
+
+	fmt.Printf("\n\tConsumer %s:%s started in automatic mode\n", myIp, port)
+
 	go serverRPC()
 	SubscribeToBroker("0.0.0.0", "12345")
 	for {
