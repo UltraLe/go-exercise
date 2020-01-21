@@ -1,7 +1,5 @@
 #!/bin/bash
 
-sudo apt-get install x-terminal-emulator
-
 x-terminal-emulator -e ./b 0
 sleep 1
 x-terminal-emulator -e ./c 0

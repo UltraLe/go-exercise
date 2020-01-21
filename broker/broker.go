@@ -93,7 +93,7 @@ func (q *QueueManager) Publish(message string, reply *string) error {
 		return nil
 	}
 
-	Queue[indx].lastTimeVisible = time.Now().Second()
+	Queue[indx].lastTimeVisible = int(time.Now().Unix())
 	Queue[indx].message = message
 	Queue[indx].visible = make(map[int]int)
 
@@ -227,7 +227,7 @@ func TimeOutChecker() {
 	for {
 		time.Sleep(time.Second * time.Duration(TIME_OUT))
 
-		now = time.Now().Second()
+		now = int(time.Now().Unix())
 
 		for queueIndx, qe := range Queue {
 
@@ -241,7 +241,7 @@ func TimeOutChecker() {
 			//if TO oof the queue element has expired, then send again the message
 			if now >= messTO {
 
-				qe.lastTimeVisible = time.Now().Second()
+				qe.lastTimeVisible = int(time.Now().Unix())
 
 				//send the queue element to the consumer that has not received it
 				for consID, vis := range qe.visible {
