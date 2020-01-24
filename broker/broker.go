@@ -19,6 +19,9 @@ const (
 	INVISIBLE               = 0
 	VISIBLE                 = 1
 	SENT                    = 2
+	TOB                     = 0
+	ALO                     = 1
+	ALO_TIMEOUT             = 3
 )
 
 type QueueElement struct {
@@ -93,27 +96,39 @@ func (q *QueueManager) Publish(message string, reply *string) error {
 		return nil
 	}
 
-	Queue[indx].lastTimeVisible = int(time.Now().Unix())
 	Queue[indx].message = message
-	Queue[indx].visible = make(map[int]int)
 
-	//in this way each message will be sent to the consumer that
-	//are connected 'in this moment' to the broker
-	mutexConsumer.Lock()
-	for _, c := range consumerList {
-		Queue[indx].visible[c.ID] = VISIBLE
-	}
+	if chosenSemantic == TOB {
+		Queue[indx].lastTimeVisible = int(time.Now().Unix())
+		Queue[indx].visible = make(map[int]int)
 
-	for i := 0; i < consumerNum; i++ {
-		go sendToConsumer(indx, consumerList[i])
+		mutexConsumer.Lock()
+		for _, c := range consumerList {
+			//in this way each message will be sent to the consumer that
+			//are connected 'in this moment' to the broker
+			Queue[indx].visible[c.ID] = VISIBLE
+		}
+
+		for i := 0; i < consumerNum; i++ {
+			go sendToConsumerTOB(indx, consumerList[i])
+		}
+		mutexConsumer.Unlock()
+
+	} else if chosenSemantic == ALO {
+
+		mutexConsumer.Lock()
+		for i := 0; i < consumerNum; i++ {
+			go sendToConsumerALO(indx, consumerList[i])
+		}
+		mutexConsumer.Unlock()
 	}
-	mutexConsumer.Unlock()
 
 	return nil
 }
 
 var TIME_OUT int
 var port string
+var chosenSemantic int
 var Queue [QUEUE_LEN]QueueElement
 
 var consumerList []ConsumerInfo
@@ -138,7 +153,43 @@ func findPosInQueue() int {
 	return -1
 }
 
-func sendToConsumer(queueElementIndex int, consumer ConsumerInfo) {
+//at least once semantic delivery
+func sendToConsumerALO(queueElementIndex int, consumer ConsumerInfo) {
+
+	client, err := rpc.Dial("tcp", consumer.ip+":"+consumer.port)
+	if err != nil {
+		//fmt.Println(err.Error())
+		return
+	}
+
+	var reply string
+	done := false
+
+	for {
+		aloCall := client.Go(CONSUMER_SERVICE_METHOD, Queue[queueElementIndex].message, &reply, nil)
+		timer := time.NewTimer(time.Second * ALO_TIMEOUT)
+
+		select {
+		case <-aloCall.Done:
+			//if the call has been done correctly
+			if reply == "ACK" {
+				done = true
+			}
+			break
+		case <-timer.C:
+			//it the after ALO_TIMEOUT seconds the call has not done yet
+			//then make it again
+			break
+		}
+
+		if done {
+			break
+		}
+	}
+}
+
+//time out based delivery semantic
+func sendToConsumerTOB(queueElementIndex int, consumer ConsumerInfo) {
 
 	//changing visibility of the message for the current consumer to invisible
 	Queue[queueElementIndex].visible[consumer.ID] = INVISIBLE
@@ -155,8 +206,6 @@ func sendToConsumer(queueElementIndex int, consumer ConsumerInfo) {
 	//N.B.: the TIME OUT VALUE has to be chosen in order to avoid
 	//situations where i could send a message more than once.
 	//for simplicity, i am not handling this case.
-
-	//this case could be handled by the consumer
 
 	err = client.Call(CONSUMER_SERVICE_METHOD, Queue[queueElementIndex].message, &reply)
 
@@ -219,7 +268,7 @@ func getConsumer(ID int) ConsumerInfo {
 	return c_nil
 }
 
-//go routine that will implement the 'timed out based' delivery semantic
+//go routine that will implement the 'time out based' delivery semantic
 func TimeOutChecker() {
 
 	var now int
@@ -253,7 +302,7 @@ func TimeOutChecker() {
 						continue
 					}
 					if vis != SENT {
-						go sendToConsumer(queueIndx, c)
+						go sendToConsumerTOB(queueIndx, c)
 						//here we could handle eventual prediction of
 						//crashed consumer by increasing a counter that
 						//indicates number of retransmissions. When the number
@@ -278,8 +327,6 @@ func serverRPC() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	go TimeOutChecker()
 
 	queueManager := new(QueueManager)
 	rpc.Register(queueManager)
@@ -338,15 +385,25 @@ func main() {
 
 		fmt.Println("Insert RPC server PORT: ")
 		fmt.Scanf("%s", &port)
-
+		for {
+			fmt.Println("Chose a delivery semantic:\n0)Time Out Based\n1)At Least Once\nYour choice: ")
+			fmt.Scanf("%d", &chosenSemantic)
+			if chosenSemantic != TOB && chosenSemantic != ALO {
+				continue
+			} else {
+				break
+			}
+		}
 	} else {
-		//if automatic mode is chosen, a fixed port and TIME_OUT value
+		//if automatic mode is chosen, the time out base delivery will be chosen
+		//with a fixed port and TIME_OUT value
 		//will be set. N.B.: the time out value could be updated later.
 		TIME_OUT = 5
 		port = "12345"
+		chosenSemantic = TOB
 	}
 
-	fmt.Printf("\n\tBroker listening on PORT %s started\n\n", port)
+	fmt.Printf("\n\tBroker listening on PORT %s started with Time Out Based Delivery semantic\n\n", port)
 
 	consumerNum = 0
 
@@ -360,6 +417,10 @@ func main() {
 	}
 
 	go serverRPC()
+
+	if chosenSemantic == TOB {
+		go TimeOutChecker()
+	}
 
 	var choice int
 
